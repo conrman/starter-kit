@@ -1,0 +1,20 @@
+{
+  "dependencies": {
+    "app.js": {
+      "files": [
+        "scripts/**/*",
+        "scripts/main.js"
+      ],
+      "main": true
+    },
+    "main.css": {
+      "files": [
+        "styles/main.css"
+      ],
+      "main": true
+    },
+    "modernizr.js": {
+      "bower": ["modernizr"]
+    }
+  }
+}

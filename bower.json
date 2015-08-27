@@ -1,0 +1,29 @@
+{
+  "name": "starter-kit",
+  "version": "0.0.0",
+  "authors": [
+    "Connor Freeman <connormfreeman@gmail.com>"
+  ],
+  "description": "Personal set of tools for frontend development",
+  "main": "index.html",
+  "moduleType": [
+    "es6",
+    "node"
+  ],
+  "keywords": [
+    "starter-kit",
+    "build",
+    "tools",
+    "gulp",
+    "es6"
+  ],
+  "license": "MIT",
+  "homepage": "connorfreeman.com",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ]
+}

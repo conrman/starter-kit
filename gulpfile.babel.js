@@ -6,6 +6,7 @@ import autoprefixer from 'autoprefixer';
 import browserSync from 'browser-sync';
 import requireDir from 'require-dir';
 import swPrecache from 'sw-precache';
+import wiredep from 'wiredep';
 import gulp from 'gulp';
 import gulpLoadPlugins from 'gulp-load-plugins';
 import pkg from './package.json';
@@ -62,7 +63,7 @@ gulp.task('scripts', () => {
     .pipe($.concat('main.min.js'))
     .pipe($.uglify({preserveComments: 'some'}))
     // Output files
-    .pipe($.sourcemaps.write('../../.tmp'))
+    .pipe($.sourcemaps.write('../../.maps'))
     .pipe(gulp.dest('dist/assets/scripts'))
     .pipe($.size({title: 'scripts'}));
 });
@@ -77,11 +78,12 @@ gulp.task('styles', () => {
     })
   ];
 
-  return gulp.src('app/assets/styles/**/*.css')
+  return gulp.src('app/assets/styles/**/*.scss')
     .pipe($.sourcemaps.init())
-    .pipe($.postcss(processors))
-    .pipe($.cssnano())
-    .pipe($.sourcemaps.write('../../.tmp'))
+    .pipe($.sass.sync().on('error', $.sass.logError))
+    .pipe($.concat('main.min.css'))
+    .pipe($.minifyCss())
+    .pipe($.sourcemaps.write('../../.maps'))
     .pipe(gulp.dest('dist/assets/styles'))
     .pipe(reload({
       stream: true
@@ -101,7 +103,7 @@ gulp.task('html', () => {
     // Remove any unused CSS
     // Note: If not using the Style Guide, you can delete it from
     // the next line to only include styles your project uses.
-    .pipe($.if('*.css', $.uncss({
+    .pipe($.if('**/*.css', $.uncss({
       html: [
         'app/index.html'
       ],
@@ -111,7 +113,7 @@ gulp.task('html', () => {
 
   // Concatenate and minify styles
   // In case you are still using useref build blocks
-  .pipe($.if('*.css', $.cssnano()))
+  .pipe($.if('**/*.css', $.minifyCss()))
     .pipe(assets.restore())
     .pipe($.useref())
 
@@ -169,7 +171,7 @@ gulp.task('serve', ['styles'], () => {
 gulp.task('serve:dist', ['default'], () => {
   browserSync({
     notify: false,
-    logPrefix: 'WSK',
+    logPrefix: 'APP',
     // Run as an https by uncommenting 'https: true'
     // Note: this uses an unsigned certificate which on first access
     //       will present a certificate warning in the browser.
@@ -179,42 +181,8 @@ gulp.task('serve:dist', ['default'], () => {
   });
 });
 
-/*==========  SERVICE WORKER  ==========*/
+/*==========  WIREDEP  ==========*/
 
-gulp.task('generate-service-worker', cb => {
-  const rootDir = 'dist';
-
-  swPrecache({
-    // Used to avoid cache conflicts when serving on localhost.
-    cacheId: pkg.name || 'starter-kit',
-    staticFileGlobs: [
-      // Add/remove glob patterns to match your directory setup.
-      `${rootDir}/assets/fonts/**/*.woff`,
-      `${rootDir}/assets/images/**/*`,
-      `${rootDir}/assets/scripts/**/*.js`,
-      `${rootDir}/assets/styles/**/*.css`,
-      `${rootDir}/*.{html,json}`
-    ],
-    // Translates a static file path to the relative URL that it's served from.
-    stripPrefix: path.join(rootDir, path.sep)
-  }, (err, swFileContents) => {
-    if (err) {
-      cb(err);
-      return;
-    }
-
-    const filepath = path.join(rootDir, 'service-worker.js');
-
-    fs.writeFile(filepath, swFileContents, err => {
-      if (err) {
-        cb(err);
-        return;
-      }
-
-      cb();
-    });
-  });
-});
 
 /*==========  DEFAULT TASK  ==========*/
 
