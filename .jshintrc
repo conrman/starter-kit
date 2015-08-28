@@ -1,0 +1,19 @@
+{
+  "asi": true,
+  "shadow": true,
+  "boss": true,
+  "browser": true,
+  "curly": true,
+  "eqeqeq": true,
+  "eqnull": true,
+  "esnext": true,
+  "evil": true,
+  "immed": true,
+  "laxbreak": true,
+  "jquery": true,
+  "latedef": true,
+  "newcap": true,
+  "noarg": true,
+  "node": true,
+  "strict": false
+}

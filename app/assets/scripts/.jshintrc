@@ -1,8 +1,0 @@
-{
-  "esnext": true,
-  "asi": true,
-  "shadow": true,
-  "boss": true,
-  "laxbreak": true,
-  "evil": true
-}

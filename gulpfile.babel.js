@@ -1,195 +1,238 @@
+/*jshint ignore:start */
 import fs from 'fs';
-import path from 'path';
 import del from 'del';
 import runSequence from 'run-sequence';
+import assetBuilder from 'asset-builder';
 import autoprefixer from 'autoprefixer';
 import browserSync from 'browser-sync';
+import minimist from 'minimist';
+import lazypipe from 'lazypipe';
+import merge from 'merge-stream';
 import requireDir from 'require-dir';
-import swPrecache from 'sw-precache';
 import wiredep from 'wiredep';
 import gulp from 'gulp';
+import gutil from 'gulp-util';
 import gulpLoadPlugins from 'gulp-load-plugins';
-import pkg from './package.json';
 
 const $ = gulpLoadPlugins();
+const argv = minimist(process.argv.slice(2));
 const reload = browserSync.reload;
 const tasks = requireDir('./tasks');
+const manifest = assetBuilder('./assets/manifest.json');
+const path = manifest.paths;
+const config = manifest.config || {};
+const globs = manifest.globs;
+const project = manifest.getProjectGlobs();
+const revManifest = path.dist + 'assets.json';
+
+// CLI options
+const enabled = {
+  // Enable static asset revisioning when `--production`
+  rev: argv.production,
+  // Disable source maps when `--production`
+  maps: !argv.production,
+  // Fail styles task on error when `--production`
+  failStyleTask: argv.production
+};
+
+
+var cssTasks = (filename) => {
+  return lazypipe()
+  .pipe(() => {
+    return $.if(!enabled.failStyleTask, $.plumber());
+  })
+  .pipe(() => {
+    return $.if(enabled.maps, $.sourcemaps.init());
+  })
+  .pipe(() => {
+    return $.if('*.scss', $.sass({
+        outputStyle: 'nested', // libsass doesn't support expanded yet
+        precision: 10,
+        includePaths: ['.'],
+        errLogToConsole: !enabled.failStyleTask
+    }));
+  })
+  .pipe($.concat, filename)
+  .pipe($.autoprefixer, {
+    browsers: [
+    'last 2 versions',
+    'ie 8',
+    'ie 9',
+    'android 2.3',
+    'android 4',
+    'opera 12'
+    ]
+  })
+  .pipe($.minifyCss, {
+    advanced: false,
+    rebase: false
+  })
+  .pipe(() => {
+    return $.if(enabled.rev, $.rev());
+  })
+  .pipe(() => {
+    return $.if(enabled.maps, $.sourcemaps.write('.'));
+  })();
+};
+
+var jsTasks = (filename) => {
+  return lazypipe()
+  .pipe(() => {
+    return $.if(enabled.maps, $.sourcemaps.init());
+  })
+  .pipe($.concat, filename)
+  .pipe($.ignore, ['**/**.map'])
+  .pipe($.uglify)
+  .pipe(() => {
+    return $.if(enabled.rev, $.rev());
+  })
+  .pipe(() => {
+    return $.if(enabled.maps, $.sourcemaps.write('.'));
+  })();
+};
+
+var writeToManifest = (directory) => {
+  return lazypipe()
+  .pipe(gulp.dest, path.dist + directory)
+  .pipe(browserSync.stream, {match: '**/*.{js,css}'})
+  .pipe($.rev.manifest, revManifest, {
+    base: path.dist,
+    merge: true
+  })
+  .pipe(gulp.dest, path.dist)();
+};
 
 /*==========  IMAGES  ==========*/
 
 // Optimize images
 gulp.task('images', () => {
-  return gulp.src('app/assets/images/**/*')
-    .pipe($.cache($.imagemin({
-      progressive: true,
-      interlaced: true
-    })))
-    .pipe(gulp.dest('dist/assets/images'))
-    .pipe($.size({
-      title: 'images'
-    }));
+ return gulp.src(globs.images)
+  .pipe($.imagemin({
+    progressive: true,
+    interlaced: true,
+    svgoPlugins: [{removeUnknownsAndDefaults: false}, {cleanupIDs: false}]
+  }))
+  .pipe(gulp.dest(path.dist + 'images'))
+  .pipe(browserSync.stream());
 });
 
 /*==========  FONTS  ==========*/
 
 // Copy web fonts to dist
 gulp.task('fonts', () => {
-  return gulp.src(['app/assets/fonts/**'])
-    .pipe(gulp.dest('dist/assets/fonts'))
-    .pipe($.size({title: 'fonts'}));
+  return gulp.src(globs.fonts)
+    .pipe($.flatten())
+    .pipe(gulp.dest(path.dist + 'fonts'))
+    .pipe(browserSync.stream());
+});
+
+/*==========  STYLES  ==========*/
+
+gulp.task('styles', ['wiredep'], () => {
+  let merged = merge();
+  manifest.forEachDependency('css', (dep) => {
+    var cssTasksInstance = cssTasks(dep.name);
+    if (!enabled.failStyleTask) {
+      cssTasksInstance.on('error', (err) => {
+        console.error(err.message);
+        this.emit('end');
+      });
+    }
+    merged.add(gulp.src(dep.globs, {base: 'styles'})
+               .pipe(cssTasksInstance));
+  });
+  return merged
+  .pipe(writeToManifest('styles'));
 });
 
 /*==========  JSHINT  ==========*/
 
 gulp.task('jshint', () => {
-  return gulp.src('app/assets/scripts/**/*.js')
-    .pipe(reload({
-      stream: true,
-      once: true
-    }))
-    .pipe($.jshint({ esnext: true }))
-    .pipe($.jshint.reporter('jshint-stylish'))
-    .pipe($.if(!browserSync.active, $.jshint.reporter('fail')));
+  return gulp.src([
+                  'bower.json', 'gulpfile.babel.js'
+                  ].concat(project.js))
+  .pipe($.jshint())
+  .pipe($.jshint.reporter('jshint-stylish'))
+  .pipe($.jshint.reporter('fail'));
 });
 
 
 /*==========  SCRIPTS  ==========*/
 
 // Concatenate and minify JavaScript
-gulp.task('scripts', () => {
-  return gulp.src(['./app/assets/scripts/**/*.js'])
-    .pipe($.sourcemaps.init())
-    .pipe($.babel())
-    .pipe($.concat('main.min.js'))
-    .pipe($.uglify({preserveComments: 'some'}))
-    // Output files
-    .pipe($.sourcemaps.write('../../.maps'))
-    .pipe(gulp.dest('dist/assets/scripts'))
-    .pipe($.size({title: 'scripts'}));
-});
-
-
-/*==========  STYLES  ==========*/
-
-gulp.task('styles', () => {
-  let processors = [
-    autoprefixer({
-      browsers: 'last 1 version'
-    })
-  ];
-
-  return gulp.src('app/assets/styles/**/*.scss')
-    .pipe($.sourcemaps.init())
-    .pipe($.sass.sync().on('error', $.sass.logError))
-    .pipe($.concat('main.min.css'))
-    .pipe($.minifyCss())
-    .pipe($.sourcemaps.write('../../.maps'))
-    .pipe(gulp.dest('dist/assets/styles'))
-    .pipe(reload({
-      stream: true
-    }))
-    .pipe($.size({title: 'styles'}));
-});
-
-/*==========  HTML  ==========*/
-
-gulp.task('html', () => {
-  const assets = $.useref.assets({
-    searchPath: '{.tmp,app}'
+gulp.task('scripts', ['jshint'], () => {
+  let merged = merge();
+  manifest.forEachDependency('js', (dep) => {
+    merged.add(
+               gulp.src(dep.globs, {base: 'scripts'})
+               .pipe(jsTasks(dep.name))
+    );
   });
-
-  return gulp.src('app/**/*.html')
-    .pipe(assets)
-    // Remove any unused CSS
-    // Note: If not using the Style Guide, you can delete it from
-    // the next line to only include styles your project uses.
-    .pipe($.if('**/*.css', $.uncss({
-      html: [
-        'app/index.html'
-      ],
-      // CSS Selectors for UnCSS to ignore
-      ignore: []
-    })))
-
-  // Concatenate and minify styles
-  // In case you are still using useref build blocks
-  .pipe($.if('**/*.css', $.minifyCss()))
-    .pipe(assets.restore())
-    .pipe($.useref())
-
-  // Minify any HTML
-  .pipe($.if('*.html', $.minifyHtml()))
-    // Output files
-    .pipe(gulp.dest('dist'))
-    .pipe($.size({
-      title: 'html'
-    }));
+  return merged
+  .pipe(writeToManifest('scripts'));
 });
+
+/*==========  TEMPLATES  ==========*/
+
+gulp.task('templates', () => {
+  let LOCALS = {};
+
+  return gulp.src('**/*.jade')
+    .pipe($.jade({
+      locals: LOCALS
+    }))
+    .pipe(gulp.dest(path.dist));
+});
+
 
 /*==========  CLEAN  ==========*/
 
 // Clean output directory
-gulp.task('clean', cb => del(['.tmp', 'dist/*', '!dist/.git'], {
-  dot: true
-}, cb));
+gulp.task('clean', del(path.dist));
 
-/*==========  COPY  ==========*/
-
-// Copy all files at the root level (app)
-gulp.task('copy', () => {
-  return gulp.src([
-    'app/*',
-    '!app/*.html',
-  ], {
-    dot: true
-  }).pipe(gulp.dest('dist'))
-    .pipe($.size({title: 'copy'}));
-});
-
-/*==========  SERVE  ==========*/
+/*==========  WATCH  ==========*/
 
 // Watch files for changes & reload
-gulp.task('serve', ['styles'], () => {
-  browserSync({
-    notify: false,
-    // Customize the BrowserSync console logging prefix
-    logPrefix: 'APP',
-    // Run as an https by uncommenting 'https: true'
-    // Note: this uses an unsigned certificate which on first access
-    //       will present a certificate warning in the browser.
-    // https: true,
-    server: ['.tmp', 'app']
+gulp.task('watch', function() {
+  browserSync.init({
+    server: {
+      baseDir: path.dist
+    }  
   });
-
-  gulp.watch(['app/**/*.html'], reload);
-  gulp.watch(['app/assets/styles/**/*.{scss,css}'], ['styles', reload]);
-  gulp.watch(['app/assets/scripts/**/*.js'], ['jshint']);
-  gulp.watch(['app/assets/images/**/*'], reload);
-});
-
-// Build and serve the output from the dist build
-gulp.task('serve:dist', ['default'], () => {
-  browserSync({
-    notify: false,
-    logPrefix: 'APP',
-    // Run as an https by uncommenting 'https: true'
-    // Note: this uses an unsigned certificate which on first access
-    //       will present a certificate warning in the browser.
-    // https: true,
-    server: 'dist',
-    baseDir: 'dist'
-  });
+  gulp.watch([path.source + 'styles/**/*'], ['styles']);
+  gulp.watch([path.source + 'scripts/**/*'], ['jshint', 'scripts']);
+  gulp.watch([path.source + 'fonts/**/*'], ['fonts']);
+  gulp.watch([path.source + 'images/**/*'], ['images']);
+  gulp.watch([path.source + 'templates/**/*'], ['templates']);
+  gulp.watch(['bower.json', 'assets/manifest.json'], ['build']);
 });
 
 /*==========  WIREDEP  ==========*/
 
+gulp.task('wiredep', () => {
+  return gulp.src(project.css)
+  .pipe(wiredep.stream())
+  .pipe($.changed(path.source + 'styles', {
+    hasChanged: $.changed.compareSha1Digest
+  }))
+  .pipe(gulp.dest(path.source + 'styles'));
+});
+
+/*==========  BUILD  ==========*/
+
+gulp.task('build', (callback) => {
+  runSequence('styles',
+              'scripts',
+              'templates',
+              ['fonts', 'images'],
+              callback
+  );
+});
 
 /*==========  DEFAULT TASK  ==========*/
 
 // Build production files, the default task
-gulp.task('default', ['clean'], cb => {
-  runSequence(
-    'styles', ['jshint', 'html', 'scripts', 'images', 'fonts', 'copy'],
-    cb
-  );
+gulp.task('default', ['clean'], () => {
+  gulp.start('build');
 });
+/*jshint ignore:end */

@@ -2,19 +2,15 @@
   "dependencies": {
     "app.js": {
       "files": [
-        "scripts/**/*",
         "scripts/main.js"
       ],
       "main": true
     },
     "main.css": {
       "files": [
-        "styles/main.css"
+        "styles/bootstrap.scss"
       ],
       "main": true
-    },
-    "modernizr.js": {
-      "bower": ["modernizr"]
     }
   }
 }
