@@ -1,49 +1,49 @@
 // Core variables and mixins
-@import "variables";
-@import "mixins";
+@import "common/variables";
+@import "common/mixins";
 
 // // Reset and dependencies
-@import "normalize";
-@import "print";
+@import "components/normalize";
+@import "components/print";
 
 // Core CSS
 @import "reboot";
-@import "type";
-@import "images";
-@import "code";
-@import "grid";
-@import "tables";
-@import "forms";
-@import "buttons";
+@import "components/type";
+@import "components/images";
+@import "components/code";
+@import "components/grid";
+@import "components/tables";
+@import "components/forms";
+@import "components/buttons";
 
 // // Components
-@import "animation";
-@import "dropdown";
-@import "button-group";
-@import "input-group";
-@import "custom-forms";
-@import "nav";
-@import "navbar";
-@import "card";
-@import "breadcrumb";
-@import "pagination";
-@import "pager";
-@import "labels";
-@import "jumbotron";
-@import "alert";
-@import "progress";
-@import "media";
-@import "list-group";
-@import "responsive-embed";
-@import "close";
+@import "components/animation";
+@import "components/dropdown";
+@import "components/button-group";
+@import "components/input-group";
+@import "components/custom-forms";
+@import "components/nav";
+@import "components/navbar";
+@import "components/card";
+@import "components/breadcrumb";
+@import "components/pagination";
+@import "components/pager";
+@import "components/labels";
+@import "components/jumbotron";
+@import "components/alert";
+@import "components/progress";
+@import "components/media";
+@import "components/list-group";
+@import "components/responsive-embed";
+@import "components/close";
 
 // Components w/ JavaScript
-@import "modal";
-@import "tooltip";
-@import "popover";
-@import "carousel";
+@import "components/modal";
+@import "components/tooltip";
+@import "components/popover";
+@import "components/carousel";
 
 // Utility classes
-@import "utilities";
-@import "utilities-spacing";
-@import "utilities-responsive";
+@import "common/utilities";
+@import "common/utilities-spacing";
+@import "common/utilities-responsive";
